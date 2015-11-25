@@ -1,7 +1,9 @@
 <?php
-/**
+ /**
  * Template
  * renderer for external template files
+ * Copyright 2015 Steffen Lange
+ * Licensed under the WTFPL license
  */
 class Template{
 
@@ -70,7 +72,10 @@ class Template{
 }
 
 /**
- * Class TemplateAPI
+ * TemplateAPI
+ * helper class for rendering templates
+ * Copyright 2015 Steffen Lange
+ * Licensed under the WTFPL license
  */
 class TemplateAPI{
     private $data;

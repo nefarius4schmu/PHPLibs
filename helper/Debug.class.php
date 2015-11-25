@@ -1,4 +1,10 @@
 <?php
+/**
+ * Debug v1.3.0
+ * Framework for debugging php variables
+ * Copyright 2015 Steffen Lange
+ * Licensed under the WTFPL license
+ */
 class Debug{
 	
 	const CLASS_INFO = "info";
