@@ -1,70 +1,167 @@
-<?php 
+<?php
+include_once(dirname(__FILE__).'/DBConnect.class.php');
+
 /**
  * Nefa Libs
- * Class DB
- * basic database connector
+ * DB Class
+ * basic database query handler
  *
- * based on
- * PHP.net
- * Author: kcleung at kcleung dot no-ip dot org
- * http://de2.php.net/manual/en/class.pdo.php#97682
- * last access: 2015-07-14
+ * Copyright 2015 Steffen Lange
+ * Licensed under the WTFPL license
  *
+ * @requires DBConnect
  * @author Steffen Lange
- * @version 1.2.0
+ * @version 1.0.2
  */
-class DB {
+class DB extends DBConnect{
+    /** string default config */
+    const CONFIG = 'db.ini';
+    /** string pre set database table names */
+    const DB_NefaDB = 'nefadb';
 
-	const DEFAULT_CONFIG = 'config.ini';
+    private $config;
+    private $schema;
+    /** @var  PDOException */
+    private $error;
+    /** @var  string */
+    private $lastQuery;
+    /** @var bool */
+    private $doDebug = false;
 
-    private static $links = [] ;
+    function __construct($schema, $config=null){
+        $this->schema = $schema;
+        $this->config = $config !== null ? $config : self::CONFIG;
+    }
 
-	private static function is($db){return isset(self::$links[$db]) && self::$links[$db];}
-	private static function get($db){return self::$links[$db];}
-	private static function set($db, $link){self::$links[$db] = $link;}
+    public function debug($state=true){$this->doDebug = $state;}
+    public function isDebug(){return $this->doDebug;}
+    public function getLastError(){return $this->error;}
+    public function getLastQuery(){return $this->lastQuery;}
 
     /**
-     * @param string $config (optional)
-     * @param string $schema (optional)
-     * @param bool $reconnect (optional)
-     * @return PDO
-     * @throws PDOException
+     * @param string $q
+     * @return array|false
      */
-    public static function getLink($config=self::DEFAULT_CONFIG, $schema=null, $reconnect=false) {
-        $key = $config.$schema;
-        if (!$reconnect && self::is($key)) {
-            return self::get($key);
+    public function select($q){
+        $stmt = $this->query($q);
+        if($stmt !== false) return $stmt->fetchAll();
+        else return false;
+    }
+
+    /**
+     * @param string $q
+     * @param callable $fn
+     * @param mixed $value (optional)
+     * @return array|false
+     * @throws Exception
+     */
+    public function map($q, $fn, $value=null){
+        if(is_callable($fn)){
+            $rows = [];
+            $stmt = $this->query($q);
+            if($stmt !== false){
+                $i = 0;
+                foreach($stmt as $row){
+                    if($fn($rows, $row, $i, $value) !== false) $i++;
+                    else break;
+                }
+                $stmt->closeCursor();
+                return $rows;
+            }
+        }else{
+            throw new Exception('map function is no callable function');
         }
-        Debug::v($config);
-        $parse = parse_ini_file ( $config , true ) ;
-		if($parse === false) return false;
-		
-        $driver = $parse [ "db_driver" ] ;
-        $dsn = "${driver}:" ;
-        $user = $parse [ "db_user" ] ;
-        $password = $parse [ "db_password" ] ;
-        $options = $parse [ "db_options" ] ;
-        $attributes = $parse [ "db_attributes" ] ;
+        return false;
+    }
 
-        foreach ( $parse [ "dsn" ] as $k => $v ) {
-            $dsn .= "${k}=${v};" ;
+    /**
+     * @param string $q
+     * @return array|false
+     */
+    public function listing($q){
+        $stmt = $this->query($q);
+        if($stmt !== false){
+            $rows = [];
+            while($row = $stmt->fetch()){
+                $first = current($row);
+                if($first !== false) $rows[] = $first;
+                else break;
+            }
+            $stmt->closeCursor();
+            return $rows;
+        }else return false;
+    }
+
+    /**
+     * @param string $q
+     * @return array|false
+     */
+    public function item($q){
+        $stmt = $this->query($q);
+        if($stmt !== false){
+            $row = $stmt->fetch();
+            $stmt->closeCursor();
+            return $row;
+        }else return false;
+    }
+
+    /**
+     * @param string $q
+     * @return string|false
+     */
+    public function value($q){
+        $item = $this->item($q);
+        return is_array($item) ? current($item) : false;
+    }
+
+    /**
+     * @return string|false
+     */
+    public function database(){
+        return $this->value('SELECT DATABASE();');
+    }
+
+    /**
+     * @return array|false
+     */
+    public function tables(){
+        return $this->map('SHOW TABLES;', function(&$rows, $row){
+            foreach($row as $key=>$value)
+                $rows[$key][] = $value;
+        });
+    }
+
+    /**
+     * @return array|false
+     */
+    public function columns($table, $full=false){
+        $oFull = !$full ? null : 'FULL ';
+//        return $this->select("SHOW ${oFull}COLUMNS FROM ${table};");
+        return $this->map("SHOW ${oFull}COLUMNS FROM ${table};", function(&$rows, $row){
+            $rows[$row['Field']] = $row;
+        });
+    }
+
+    /**
+     * @param string $q
+     * @param int $fetchStyle
+     * @return PDOStatement|false
+     */
+    private function query($q, $fetchStyle=PDO::FETCH_ASSOC){
+        $this->lastQuery = $q;
+        if(!$this->isDebug()){
+            $error = null;
+            $stmt = null;
+            try{
+                $connection = parent::getLink($this->config, $this->schema);
+                $stmt = $connection->query($q, $fetchStyle);
+                if($stmt === false) $error = new PDOException('query failed');
+            }catch(PDOException $e){
+                $error = $e;
+            }
+            $this->error = $error;
+            if($error === null) return $stmt;
         }
-
-        if(is_string($schema)) $dsn .= 'dbname='.$schema;
-
-
-		try{
-			$link = new PDO ( $dsn, $user, $password, $options ) ;
-		}catch(PDOException $e){
-			throw new PDOException($e);
-		}
-        
-        foreach ( $attributes as $k => $v ) {
-            $link -> setAttribute ( constant ( "PDO::{$k}" )
-                , constant ( "PDO::{$v}" ) ) ;
-        }
-
-		self::set($key, $link);
-        return $link ;
+        return false;
     }
 }

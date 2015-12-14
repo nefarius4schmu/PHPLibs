@@ -4,22 +4,20 @@ define('ROOT', dirname(__FILE__).'/');
 include_once(ROOT.'DB.class.php');
 include_once(ROOT.'../helper/Debug.class.php');
 include_once(ROOT.'../Generator/Table.class.php');
+include_once(ROOT.'DBTable.class.php');
 
 $table = new Table(['class'=>'table']);
 $dbh = new DB(DB::DB_NefaDB);
-$query = 'SELECT * FROM tags;';
-$map = $dbh->map($query, function(&$rows, $row){$rows[] = $row;});
-$value = $dbh->value($query);
-$item = $dbh->item($query);
-$listing = $dbh->listing($query);
+
 $database = $dbh->database();
 $tables = $dbh->tables();
-
+$tables = $tables[key($tables)];
+$tableInfo = [];
 ?>
 <!DOCTYPE HTML>
 <html>
 <head>
-    <title>Database Class Tests</title>
+    <title>Database Analyse</title>
     <meta charset="UTF-8"/>
     <!-- Latest compiled and minified CSS -->
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css" integrity="sha384-1q8mTJOASx8j1Au+a5WDVnPi2lkFfwwEAa8hDDdjZlpLegxhjVME1fgjWPGmkzs7" crossorigin="anonymous">
@@ -32,27 +30,26 @@ $tables = $dbh->tables();
 </head>
 <body>
     <div class="wrapper">
-        <h1>Database Class Tests</h1>
+        <h1>Database Analyse</h1>
         <section>
-            <h2>Value</h2>
-            <?=Debug::r($value)?>
-        </section>
-        <section>
-            <h2>Item</h2>
-            <?=$table->listing($item)?>
-        </section>
-        <section>
-            <h2>Listing</h2>
-            <?=$table->listing($listing)?>
-        </section>
-        <section>
-            <h2>Map</h2>
-            <?=$table->basic($map, ['class'=>'table'])?>
-        </section>
-        <section>
-            <h2>DB</h2>
+            <h2>Basic Info</h2>
+            <h3>Database</h3>
             <?=Debug::r($database)?>
-            <?=$database !== false && $tables !== false ? $table->listing($tables[key($tables)], ['class'=>'table']) : Debug::e('failed to get database infos')?>
+            <h3>Tables</h3>
+            <?=$table->listing($tables)?>
+            <h3>Columns</h3>
+            <?php
+            foreach($tables as $name){
+                echo "<h4>${name}</h4>";
+                $cols = $dbh->columns($name);
+                echo $table->multi($cols);
+                $tableInfo[$name] = new DBTable($name, $cols);
+            }
+            ?>
+        </section>
+        <section>
+            <h3>Parsed</h3>
+            <?=Debug::s($tableInfo)?>
         </section>
         <section>
             <h2>Debug</h2>
